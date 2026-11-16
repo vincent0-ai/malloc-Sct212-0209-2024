@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 #include <unistd.h>
 
 extern void *sbrk(intptr_t increment);
@@ -104,6 +105,33 @@ static void report_error(const char *message, size_t length)
     (void)write(STDERR_FILENO, message, length);
 }
 
+static void split_block(block_t *block, size_t need)
+{
+    block_t *remainder;
+
+    if (block->size < need + HDR + ALIGNMENT)
+        return;
+    remainder = (block_t *)((char *)payload(block) + need);
+    remainder->size = block->size - need - HDR;
+    remainder->next = block->next;
+    remainder->free = 1;
+    remainder->magic = MAGIC;
+    block->next = remainder;
+    block->size = need;
+    if (remainder->next != NULL && remainder->next->free &&
+        (char *)payload(remainder) + remainder->size ==
+            (char *)remainder->next) {
+        block_t *next = remainder->next;
+
+        remainder->size += HDR + next->size;
+        remainder->next = next->next;
+        if (tail == next)
+            tail = remainder;
+    }
+    if (tail == block)
+        tail = remainder;
+}
+
 void *my_malloc(size_t size)
 {
     size_t need;
@@ -117,18 +145,8 @@ void *my_malloc(size_t size)
         block = grow(need);
     if (block == NULL)
         return NULL;
-    if (block->free && block->size >= need + HDR + ALIGNMENT) {
-        block_t *remainder = (block_t *)((char *)payload(block) + need);
-
-        remainder->size = block->size - need - HDR;
-        remainder->next = block->next;
-        remainder->free = 1;
-        remainder->magic = MAGIC;
-        block->next = remainder;
-        block->size = need;
-        if (tail == block)
-            tail = remainder;
-    }
+    if (block->free)
+        split_block(block, need);
     block->free = 0;
     return payload(block);
 }
@@ -164,5 +182,67 @@ void my_free(void *ptr)
         } else {
             current = next;
         }
+    }
+}
+
+void *my_calloc(size_t nmemb, size_t size)
+    {
+        size_t total;
+        void *ptr;
+
+        if (nmemb != 0 && size > SIZE_MAX / nmemb)
+            return NULL;
+        total = nmemb * size;
+        ptr = my_malloc(total);
+        if (ptr != NULL)
+            memset(ptr, 0, total);
+        return ptr;
+    }
+
+void *my_realloc(void *ptr, size_t size)
+    {
+        block_t *block;
+        size_t need;
+
+        if (ptr == NULL)
+            return my_malloc(size);
+        if (size == 0) {
+            my_free(ptr);
+            return NULL;
+        }
+        if (size > SIZE_MAX - (ALIGNMENT - 1))
+            return NULL;
+        block = find_block(ptr);
+        if (block == NULL || block->magic != MAGIC || block->free) {
+            report_error("my_free: invalid pointer\n", sizeof("my_free: invalid pointer\n") - 1);
+            return NULL;
+        }
+        need = align_up(size);
+        if (block->size >= need) {
+            split_block(block, need);
+            return ptr;
+        }
+        if (block->next != NULL && block->next->free &&
+            (char *)payload(block) + block->size == (char *)block->next &&
+            block->size + HDR + block->next->size >= need) {
+            block_t *next = block->next;
+
+            block->size += HDR + next->size;
+            block->next = next->next;
+            if (tail == next)
+                tail = block;
+            split_block(block, need);
+            return ptr;
+        }
+        {
+            void *replacement = my_malloc(size);
+            size_t copy_size;
+
+            if (replacement == NULL)
+                return NULL;
+            copy_size = block->size < size ? block->size : size;
+            memcpy(replacement, ptr, copy_size);
+            my_free(ptr);
+            return replacement;
     }
 }
