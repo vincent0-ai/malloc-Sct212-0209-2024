@@ -101,6 +101,18 @@ void *my_malloc(size_t size)
         block = grow(need);
     if (block == NULL)
         return NULL;
+    if (block->free && block->size >= need + HDR + ALIGNMENT) {
+        block_t *remainder = (block_t *)((char *)payload(block) + need);
+
+        remainder->size = block->size - need - HDR;
+        remainder->next = block->next;
+        remainder->free = 1;
+        remainder->magic = MAGIC;
+        block->next = remainder;
+        block->size = need;
+        if (tail == block)
+            tail = remainder;
+    }
     block->free = 0;
     return payload(block);
 }
