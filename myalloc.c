@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <unistd.h>
 
 #define ALIGNMENT ((size_t)16)
 #define MAGIC ((int)0x4D414C4C)
@@ -39,4 +40,38 @@ static void *payload(block_t *block)
 static block_t *header(void *ptr)
 {
     return (block_t *)((char *)ptr - HDR);
+}
+
+static block_t *grow(size_t need)
+{
+    char *program_break;
+    size_t padding;
+    size_t request;
+    block_t *block;
+
+    program_break = (char *)sbrk(0);
+    if (program_break == (void *)-1)
+        return NULL;
+    padding = ((size_t)(-(uintptr_t)program_break)) % ALIGNMENT;
+    if (padding != 0 && sbrk((intptr_t)padding) == (void *)-1)
+        return NULL;
+
+    request = align_up(need + HDR);
+    if (request < 64 * 1024)
+        request = 64 * 1024;
+    block = (block_t *)sbrk((intptr_t)request);
+    if (block == (void *)-1)
+        return NULL;
+
+    block->size = request - HDR;
+    block->next = NULL;
+    block->free = 0;
+    block->magic = MAGIC;
+    heap_bytes += padding + request;
+    if (tail != NULL)
+        tail->next = block;
+    else
+        head = block;
+    tail = block;
+    return block;
 }
