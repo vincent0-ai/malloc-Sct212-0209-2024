@@ -88,6 +88,22 @@ static block_t *find_fit(size_t need)
     return NULL;
 }
 
+static block_t *find_block(void *ptr)
+{
+    block_t *candidate = header(ptr);
+    block_t *current;
+
+    for (current = head; current != NULL; current = current->next)
+        if (current == candidate && payload(current) == ptr)
+            return current;
+    return NULL;
+}
+
+static void report_error(const char *message, size_t length)
+{
+    (void)write(STDERR_FILENO, message, length);
+}
+
 void *my_malloc(size_t size)
 {
     size_t need;
@@ -115,4 +131,38 @@ void *my_malloc(size_t size)
     }
     block->free = 0;
     return payload(block);
+}
+
+void my_free(void *ptr)
+{
+    block_t *block;
+    block_t *current;
+
+    if (ptr == NULL)
+        return;
+    block = find_block(ptr);
+    if (block == NULL || block->magic != MAGIC) {
+        report_error("my_free: invalid pointer\n", sizeof("my_free: invalid pointer\n") - 1);
+        return;
+    }
+    if (block->free) {
+        report_error("my_free: double free detected\n",
+                     sizeof("my_free: double free detected\n") - 1);
+        return;
+    }
+    block->free = 1;
+    current = head;
+    while (current != NULL && current->next != NULL) {
+        block_t *next = current->next;
+
+        if (current->free && next->free &&
+            (char *)payload(current) + current->size == (char *)next) {
+            current->size += HDR + next->size;
+            current->next = next->next;
+            if (tail == next)
+                tail = current;
+        } else {
+            current = next;
+        }
+    }
 }
