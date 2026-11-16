@@ -83,13 +83,16 @@ and that adjacent free blocks have been merged.
 The allocator is single-threaded, never returns memory to the operating system,
 and has no segregated size classes or locking.
 
-## Sources and AI declaration
+## References
 
-References:
-https://0xkiire.com/memory-allocators/,
-https://github.com/shrutej27/Writing-your-own-memory-allocator-in-C,
-https://www.jterrazz.com/articles/1-writing-your-own-malloc-in-c-a-memory-allocator-from-scratch.
+1. 0xkiire, “Building a Memory Allocator from Scratch in C,”
+   https://0xkiire.com/memory-allocators/
+2. shrutej27, “Writing your own memory allocator in C,”
+   https://github.com/shrutej27/Writing-your-own-memory-allocator-in-C
+3. Jean-Baptiste Terrazzoni, “Writing your own malloc in C: A memory allocator
+   from scratch,”
+   https://www.jterrazz.com/articles/1-writing-your-own-malloc-in-c-a-memory-allocator-from-scratch
 
-AI assistance was used to review the requirements, structure the implementation,
-and identify edge cases. The submitted code was adapted to the provided public
-API and test harness.
+## AI declaration
+
+AI assistance was used to review the requirements and structure the implementation. This Readme and the bechmark report were generated with the help of Copilot.
