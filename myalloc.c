@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -82,11 +83,17 @@ static block_t *grow(size_t need)
 static block_t *find_fit(size_t need)
 {
     block_t *current;
+    block_t *best = NULL;
 
-    for (current = head; current != NULL; current = current->next)
-        if (current->free && current->size >= need)
+    for (current = head; current != NULL; current = current->next) {
+        if (!current->free || current->size < need)
+            continue;
+        if (policy == FIT_FIRST)
             return current;
-    return NULL;
+        if (best == NULL || current->size < best->size)
+            best = current;
+    }
+    return best;
 }
 
 static block_t *find_block(void *ptr)
@@ -245,4 +252,75 @@ void *my_realloc(void *ptr, size_t size)
             my_free(ptr);
             return replacement;
     }
+}
+
+void set_policy(fit_policy_t p)
+{
+    policy = p == FIT_BEST ? FIT_BEST : FIT_FIRST;
+}
+
+void heap_stats(heap_stats_t *out)
+{
+    block_t *current;
+
+    if (out == NULL)
+            return;
+    out->heap_bytes = heap_bytes;
+    out->used_bytes = 0;
+    out->free_bytes = 0;
+    out->blocks = 0;
+    out->free_blocks = 0;
+    out->largest_free = 0;
+    for (current = head; current != NULL; current = current->next) {
+            out->blocks++;
+            if (current->free) {
+                out->free_bytes += current->size;
+                out->free_blocks++;
+                if (current->size > out->largest_free)
+                    out->largest_free = current->size;
+            } else {
+                out->used_bytes += current->size;
+            }
+    }
+}
+
+void heap_dump(void)
+{
+    block_t *current;
+    int index = 0;
+
+    for (current = head; current != NULL; current = current->next) {
+            char buffer[128];
+            int length = snprintf(buffer, sizeof(buffer), "[%d] %p size=%zu %s\n",
+                                  index, payload(current), current->size,
+                                  current->free ? "FREE" : "USED");
+
+            if (length > 0) {
+                size_t output_length = (size_t)length < sizeof(buffer)
+                                            ? (size_t)length : sizeof(buffer) - 1;
+                (void)write(STDOUT_FILENO, buffer, output_length);
+            }
+            index++;
+    }
+}
+
+int heap_check(void)
+{
+    block_t *current;
+
+    for (current = head; current != NULL; current = current->next) {
+            if (current->magic != MAGIC ||
+                current->size % ALIGNMENT != 0 ||
+                ((uintptr_t)payload(current) % ALIGNMENT) != 0)
+                return 0;
+            if (current->next != NULL) {
+                if ((uintptr_t)current >= (uintptr_t)current->next)
+                    return 0;
+                if (current->free && current->next->free &&
+                    (char *)payload(current) + current->size ==
+                        (char *)current->next)
+                    return 0;
+            }
+    }
+    return 1;
 }
