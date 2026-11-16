@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <unistd.h>
 
+extern void *sbrk(intptr_t increment);
+
 #define ALIGNMENT ((size_t)16)
 #define MAGIC ((int)0x4D414C4C)
 
@@ -74,4 +76,31 @@ static block_t *grow(size_t need)
         head = block;
     tail = block;
     return block;
+}
+
+static block_t *find_fit(size_t need)
+{
+    block_t *current;
+
+    for (current = head; current != NULL; current = current->next)
+        if (current->free && current->size >= need)
+            return current;
+    return NULL;
+}
+
+void *my_malloc(size_t size)
+{
+    size_t need;
+    block_t *block;
+
+    if (size == 0 || size > SIZE_MAX - (ALIGNMENT - 1))
+        return NULL;
+    need = align_up(size);
+    block = find_fit(need);
+    if (block == NULL)
+        block = grow(need);
+    if (block == NULL)
+        return NULL;
+    block->free = 0;
+    return payload(block);
 }
