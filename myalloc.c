@@ -8,8 +8,6 @@
 #include <string.h>
 #include <unistd.h>
 
-extern void *sbrk(intptr_t increment);
-
 #define ALIGNMENT ((size_t)16)
 #define MAGIC ((int)0x4D414C4C)
 
