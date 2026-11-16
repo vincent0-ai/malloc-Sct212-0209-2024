@@ -51,6 +51,8 @@ static block_t *grow(size_t need)
     size_t request;
     block_t *block;
 
+    if (need > SIZE_MAX - HDR)
+        return NULL;
     program_break = (char *)sbrk(0);
     if (program_break == (void *)-1)
         return NULL;
